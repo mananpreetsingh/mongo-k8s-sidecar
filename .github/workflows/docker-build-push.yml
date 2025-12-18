@@ -25,36 +25,56 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata (for tags)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
-
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          # Determine tag based on branch/tag
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}"
+            echo "PR build - tagging as: $TAG"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # Extract version from tag (e.g., v1.0.0 -> 1.0.0)
+            VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+            TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$VERSION"
+            LATEST_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            echo "Tag build - tagging as: $TAG and $LATEST_TAG"
+          elif [[ "${{ github.ref }}" == refs/heads/release-* ]]; then
+            # Extract version from release branch (e.g., release-1.0.0 -> 1.0.0)
+            VERSION=$(echo "${{ github.ref_name }}" | sed 's/^release-//')
+            TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$VERSION"
+            LATEST_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            echo "Release branch - tagging as: $TAG and $LATEST_TAG"
+          elif [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            echo "Main branch - tagging as: $TAG"
+          else
+            TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}"
+            echo "Other branch - tagging as: $TAG"
+          fi
+          
+          # Build image
+          echo "Building image..."
+          docker build -t "$TAG" .
+          
+          # Tag as latest if version tag or release branch
+          if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "$TAG" ]; then
+            docker tag "$TAG" "$LATEST_TAG"
+          fi
+          
+          # Push if not a PR
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Pushing: $TAG"
+            docker push "$TAG"
+            if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "$TAG" ]; then
+              echo "Pushing: $LATEST_TAG"
+              docker push "$LATEST_TAG"
+            fi
+          else
+            echo "Skipping push (PR build - image built successfully)"
+          fi
 
