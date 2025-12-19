@@ -1,0 +1,67 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  labels:
+    app: mongo
+spec:
+  ports:
+  - port: 27017
+    targetPort: 27017
+    name: mongodb
+  clusterIP: None
+  selector:
+    app: mongo
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+spec:
+  serviceName: "mongo"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: mongo
+          image: mongo:8.2
+          command:
+            - mongod
+            - "--bind_ip_all"
+            - "--replSet"
+            - rs0
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          volumeMounts:
+            - name: mongo-persistent-storage
+              mountPath: /data/db
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+        - name: mongo-sidecar
+          image: manansingh/mongo-k8s-sidecar:1.0.0
+          env:
+            - name: MONGO_SIDECAR_POD_LABELS
+              value: "app=mongo"
+            - name: KUBERNETES_MONGO_SERVICE_NAME
+              value: mongo
+            # KUBE_NAMESPACE is optional - sidecar auto-detects namespace from pod service account
+  volumeClaimTemplates:
+  - metadata:
+      name: mongo-persistent-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "persistent-storage"  # Change to your storage class name
+      resources:
+        requests:
+          storage: 2Gi

@@ -1,0 +1,44 @@
+---
+# Example Storage Class configurations
+# Uncomment and customize the one that matches your Kubernetes environment
+
+# AWS EBS SSD
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: fast
+# provisioner: kubernetes.io/aws-ebs
+# parameters:
+#   type: gp3
+#   fsType: ext4
+# volumeBindingMode: WaitForFirstConsumer
+
+# Azure Disk SSD
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: fast
+# provisioner: kubernetes.io/azure-disk
+# parameters:
+#   storageaccounttype: Premium_LRS
+#   kind: Managed
+# volumeBindingMode: WaitForFirstConsumer
+
+# GCP Persistent Disk SSD
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: fast
+# provisioner: pd.csi.storage.gke.io
+# parameters:
+#   type: pd-ssd
+# volumeBindingMode: WaitForFirstConsumer
+
+# Minikube (for local testing)
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: fast
+# provisioner: k8s.io/minikube-hostpath
+# volumeBindingMode: Immediate
+
