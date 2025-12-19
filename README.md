@@ -1,6 +1,8 @@
-#  Mongo Kubernetes Sidecar - Mongo 8.0+ compatible
+# Mongo Kubernetes Replica Set Sidecar - Mongo 8.0+ compatible
 
-A Kubernetes sidecar container that automatically manages MongoDB replica set configuration in Kubernetes clusters. This version is **fully compatible with MongoDB 8.0+** and uses modern Node.js and MongoDB drivers.
+A Kubernetes sidecar container that automatically manages MongoDB replica set configuration in Kubernetes clusters.
+
+This version is **fully compatible with MongoDB 8.0+** and uses modern Node.js and MongoDB drivers.
 
 ## Features
 
@@ -11,21 +13,22 @@ A Kubernetes sidecar container that automatically manages MongoDB replica set co
 - ✅ **Health Monitoring** - Automatically removes unhealthy members from replica sets
 - ✅ **Modern Stack** - Built with Node.js 24, MongoDB driver 7.x, and Kubernetes client 1.x
 
+## Compatibility Matrix
+
+| MongoDB Version | Status | Notes |
+|----------------|--------|-------|
+| 8.2+ | ✅ Fully Tested | Recommended version |
+| 8.1 | ✅ Fully Tested | Fully supported |
+| 8.0 | ✅ Fully Tested | Fully supported |
+| 7.0 - 7.x | ⚠️ May Work | Not tested, may require adjustments |
+| 6.0 - 6.x | ⚠️ May Work | Not tested, may require adjustments |
+| < 6.0 | ❌ Not Supported | Uses features not available in older versions |
+
 ## Requirements
 
 - Kubernetes cluster (1.33+)
-- MongoDB 8.0+ (tested with MongoDB 8.0+)
+- MongoDB 8.0+ (see Compatibility Matrix above)
 - Node.js 24+ (in container)
-
-## How It Works
-
-The sidecar container runs alongside your MongoDB container and:
-
-1. **Discovers MongoDB pods** in the cluster using Kubernetes API
-2. **Initializes replica set** if not already configured
-3. **Adds new members** when pods are created or scaled up
-4. **Removes unhealthy members** when pods become unhealthy or are deleted
-5. **Uses stable DNS names** from StatefulSets for reliable member identification
 
 ## Installation
 
@@ -35,102 +38,13 @@ The sidecar container runs alongside your MongoDB container and:
 docker pull manansingh/mongo-k8s-sidecar:1.0.0
 ```
 
-### Building from Source
-
-**For local development:**
-```bash
-git clone https://github.com/mananpreetsingh/mongo-k8s-sidecar.git
-cd mongo-k8s-sidecar
-npm install
-docker build -t mongo-k8s-sidecar:1.0.0 .
-```
-
-**For Kubernetes deployment (AMD64/x86_64):**
-```bash
-git clone https://github.com/mananpreetsingh/mongo-k8s-sidecar.git
-cd mongo-k8s-sidecar
-npm install
-
-# Build for AMD64 platform (required for most Kubernetes clusters)
-docker build --platform linux/amd64 -t manansingh/mongo-k8s-sidecar:1.0.0 .
-
-# Tag as latest
-docker tag manansingh/mongo-k8s-sidecar:1.0.0 manansingh/mongo-k8s-sidecar:latest
-
-# Login to Docker Hub
-docker login
-
-# Push to Docker Hub
-docker push manansingh/mongo-k8s-sidecar:1.0.0
-docker push manansingh/mongo-k8s-sidecar:latest
-```
-
-**Note:** If building on Apple Silicon (M1/M2/M3), you must use `--platform linux/amd64` to ensure compatibility with most Kubernetes clusters.
-
-### Automated Builds with GitHub Actions
-
-This repository includes a GitHub Actions workflow that automatically builds and pushes Docker images to Docker Hub on:
-- Push to `main` or `master` branch
-- Creation of version tags (e.g., `v1.0.0`)
-- Manual workflow dispatch
-
-**Setup:**
-1. Go to your repository Settings → Secrets and variables → Actions
-2. Add the following secrets:
-   - `DOCKER_USERNAME`: Your Docker Hub username (`manansingh`)
-   - `DOCKER_PASSWORD`: Your Docker Hub access token (create one at https://hub.docker.com/settings/security)
-
-**Usage:**
-- Push to `main` branch → Builds and pushes `latest` tag
-- Create a tag `v1.0.0` → Builds and pushes `1.0.0`, `1.0`, `1`, and `latest` tags
-- Images are automatically built for `linux/amd64` platform
-
 ## Usage
 
-### Basic StatefulSet Example
+See the [example directory](example/) for complete, ready-to-use StatefulSet configurations.
 
-```yaml
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: mongo
-spec:
-  serviceName: mongo
-  replicas: 3
-  template:
-    spec:
-      containers:
-      - name: mongo
-        image: mongo:8.2
-        command:
-        - mongod
-        - "--bind_ip_all"
-        - "--replSet"
-        - rs0
-        ports:
-        - containerPort: 27017
-        volumeMounts:
-        - name: mongo-persistent-storage
-          mountPath: /data/db
-      - name: mongo-sidecar
-        image: manansingh/mongo-k8s-sidecar:1.0.0
-        env:
-        - name: MONGO_SIDECAR_POD_LABELS
-          value: "app=mongo"
-        - name: KUBERNETES_MONGO_SERVICE_NAME
-          value: mongo
-        - name: KUBE_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-  volumeClaimTemplates:
-  - metadata:
-      name: mongo-persistent-storage
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        requests:
-          storage: 10Gi
+Quick start:
+```bash
+kubectl apply -f example/StatefulSet/mongo-statefulset.yaml
 ```
 
 ### Environment Variables
@@ -151,14 +65,6 @@ spec:
 | `MONGO_SSL_ENABLED` | No | `false` | Enable SSL/TLS for MongoDB connections. Set to `true` to enable. |
 | `MONGO_SSL_ALLOW_INVALID_CERTIFICATES` | No | `false` | Allow self-signed or invalid SSL certificates. Set to `true` to allow. |
 | `MONGO_SSL_ALLOW_INVALID_HOSTNAMES` | No | `false` | Allow SSL certificates with hostnames that don't match. Set to `true` to allow. |
-
-## How It Works
-
-1. **Pod Discovery**: Uses Kubernetes API to find all pods matching the specified labels
-2. **Replica Set Check**: Checks if MongoDB is already part of a replica set
-3. **Initialization**: If not initialized, the first pod (by IP) initializes the replica set
-4. **Member Management**: Primary pod adds/removes members based on pod status
-5. **Health Monitoring**: Removes members that are unhealthy for more than the configured threshold
 
 ## Stable Network IDs
 
@@ -200,54 +106,12 @@ The sidecar prefers stable network IDs but is compatible with replica sets confi
 
 ## SSL/TLS Configuration
 
-### Enabling SSL
+To enable SSL/TLS, configure MongoDB with SSL flags and set the sidecar environment variables:
+- `MONGO_SSL_ENABLED=true`
+- `MONGO_SSL_ALLOW_INVALID_CERTIFICATES=true` (for self-signed certificates)
+- `MONGO_SSL_ALLOW_INVALID_HOSTNAMES=true` (if certificate hostnames don't match)
 
-To enable SSL/TLS connections to MongoDB:
-
-```yaml
-containers:
-- name: mongo
-  image: mongo:8.2
-  command:
-  - mongod
-  - "--bind_ip_all"
-  - "--replSet"
-  - rs0
-  - "--sslMode"
-  - "requireSSL"
-  - "--sslPEMKeyFile"
-  - "/data/ssl/mongodb.pem"
-  volumeMounts:
-  - name: mongo-ssl
-    mountPath: /data/ssl
-- name: mongo-sidecar
-  image: manansingh/mongo-k8s-sidecar:1.0.0
-  env:
-  - name: MONGO_SIDECAR_POD_LABELS
-    value: "app=mongo"
-  - name: KUBERNETES_MONGO_SERVICE_NAME
-    value: mongo
-  - name: MONGO_SSL_ENABLED
-    value: "true"
-  - name: MONGO_SSL_ALLOW_INVALID_CERTIFICATES
-    value: "true"  # For self-signed certificates
-  - name: MONGO_SSL_ALLOW_INVALID_HOSTNAMES
-    value: "true"  # If certificate hostnames don't match
-volumes:
-- name: mongo-ssl
-  secret:
-    secretName: mongo-ssl-cert
-```
-
-### Creating SSL Certificates
-
-Create a Kubernetes secret with your SSL certificate:
-
-```bash
-kubectl create secret generic mongo-ssl-cert \
-  --from-file=mongodb.pem=/path/to/mongodb.pem \
-  -n <namespace>
-```
+See the [example directory](example/) for complete SSL configuration examples.
 
 ## Troubleshooting
 
@@ -269,26 +133,6 @@ kubectl create secret generic mongo-ssl-cert \
 - Verify DNS resolution works: `nslookup mongo-0.mongo.default.svc.cluster.local`
 - Check MongoDB replica set status: `rs.status()`
 
-## Development
-
-### Prerequisites
-
-- Node.js 24+
-- npm
-- Docker
-
-### Running Locally
-
-```bash
-npm install
-npm start
-```
-
-### Testing
-
-```bash
-npm test
-```
 
 ## License
 
@@ -307,3 +151,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Support
 
 For issues and questions, please open an issue on [GitHub](https://github.com/mananpreetsingh/mongo-k8s-sidecar/issues).
+
+If you find this project helpful, consider supporting development:
+
+<div align="center">
+
+<a href="https://ko-fi.com/imsingh">
+  <img src="https://cdn.ko-fi.com/cdn/kofi1.png" alt="Support Us" height="50" />
+</a>
+
+</div>

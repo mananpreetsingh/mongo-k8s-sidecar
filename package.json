@@ -2,10 +2,10 @@
   "name": "mongo-k8s-sidecar",
   "version": "1.0.0",
   "description": "Kubernetes sidecar for mongo - MongoDB 8.0+ compatible",
-  "main": "src/index.js",
+  "main": "app/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "watch": "nodemon src/index.js"
+    "start": "node app/index.js",
+    "watch": "nodemon app/index.js"
   },
   "repository": {
     "type": "git",
@@ -19,7 +19,16 @@
     "sidecar",
     "docker",
     "replica",
-    "replicaset"
+    "replicaset",
+    "statefulset",
+    "helm",
+    "container",
+    "automation",
+    "high-availability",
+    "ha",
+    "cluster",
+    "devops",
+    "infrastructure"
   ],
   "author": "Manan Singh",
   "license": "MIT",
@@ -38,6 +47,6 @@
     "mongodb": "^7.0.0"
   },
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=25.0.0"
   }
 }

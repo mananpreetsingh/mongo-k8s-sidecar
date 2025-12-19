@@ -31,6 +31,8 @@ var workloop = function workloop() {
     throw new Error('Must initialize with the host machine\'s addr');
   }
 
+  console.log('\n=== Starting workloop cycle ===');
+  
   //Do in series so if k8s.getMongoPods fails, it doesn't open a db connection
   k8s.getMongoPods(function(err, pods) {
     if (err) {
@@ -54,27 +56,46 @@ var workloop = function workloop() {
       return finish('No pods are currently running, probably just give them some time.');
     }
 
+    console.log('Checking replica set status for ' + pods.length + ' pod(s)...');
+    
     //Lets try and get the rs status for this mongo instance
     //If it works with no errors, they are in the rs
     //If we get a specific error, it means they aren't in the rs
     mongo.replSetGetStatus(db, function(err, status) {
       if (err) {
         if (err.code && err.code == 94) {
+          console.log('Replica set not initialized yet (code 94)');
           notInReplicaSet(db, pods, function(err) {
             finish(err, db);
           });
         }
         else if (err.code && err.code == 93) {
+          console.log('Replica set config is invalid (code 93)');
           invalidReplicaSet(db, pods, status, function(err) {
             finish(err, db);
           });
         }
         else {
+          console.log('Error checking replica set status:', err.message || err);
           finish(err, db);
         }
         return;
       }
 
+      var memberCount = status.members ? status.members.length : 0;
+      console.log('Replica set is active. Current members: ' + memberCount);
+      
+      // Log member details (one per line)
+      if (status.members && status.members.length > 0) {
+        console.log('  Members:');
+        for (var i = 0; i < status.members.length; i++) {
+          var m = status.members[i];
+          var stateStr = m.stateStr || 'UNKNOWN';
+          var isSelf = m.self ? ' (this pod)' : '';
+          console.log('    - ' + m.name + ' [' + stateStr + ']' + isSelf);
+        }
+      }
+      
       inReplicaSet(db, pods, status, function(err) {
         finish(err, db);
       });
@@ -95,7 +116,12 @@ var finish = function(err, db) {
     });
   }
 
-  setTimeout(workloop, loopSleepSeconds * 1000);
+  // Add separator to show end of cycle
+  console.log('--- Cycle complete. Waiting ' + loopSleepSeconds + ' seconds before next check ---');
+  
+  setTimeout(function() {
+    workloop();
+  }, loopSleepSeconds * 1000);
 };
 
 var inReplicaSet = function(db, pods, status, done) {
@@ -105,11 +131,14 @@ var inReplicaSet = function(db, pods, status, done) {
   var members = status.members;
 
   var primaryExists = false;
+  var isPrimary = false;
   for (var i in members) {
     var member = members[i];
 
     if (member.state === 1) {
       if (member.self) {
+        isPrimary = true;
+        console.log('This pod is the PRIMARY. Managing replica set members...');
         return primaryWork(db, pods, members, false, done);
       }
 
@@ -119,10 +148,14 @@ var inReplicaSet = function(db, pods, status, done) {
   }
 
   if (!primaryExists && podElection(pods)) {
-    console.log('Pod has been elected as a secondary to do primary work');
+    console.log('No primary exists. Pod has been elected as a secondary to do primary work');
     return primaryWork(db, pods, members, true, done);
   }
 
+  if (!isPrimary) {
+    console.log('This pod is a SECONDARY. Primary exists, no action needed.');
+  }
+  
   done();
 };
 
@@ -133,13 +166,22 @@ var primaryWork = function(db, pods, members, shouldForce, done) {
   var addrToRemove = addrToRemoveLoop(members);
 
   if (addrToAdd.length || addrToRemove.length) {
-    console.log('Addresses to add:    ', addrToAdd);
-    console.log('Addresses to remove: ', addrToRemove);
+    console.log('\nPRIMARY ACTION: Updating replica set configuration');
+    console.log('  Addresses to add:    ', addrToAdd.length > 0 ? addrToAdd.join(', ') : 'none');
+    console.log('  Addresses to remove: ', addrToRemove.length > 0 ? addrToRemove.join(', ') : 'none');
 
-    mongo.addNewReplSetMembers(db, addrToAdd, addrToRemove, shouldForce, done);
+    mongo.addNewReplSetMembers(db, addrToAdd, addrToRemove, shouldForce, function(err) {
+      if (err) {
+        console.error('Failed to update replica set:', err.message || err);
+        return done(err);
+      }
+      console.log('Successfully updated replica set configuration');
+      done();
+    });
     return;
   }
 
+  console.log('PRIMARY CHECK: Replica set is up-to-date. All ' + pods.length + ' pod(s) are members.');
   done();
 };
 

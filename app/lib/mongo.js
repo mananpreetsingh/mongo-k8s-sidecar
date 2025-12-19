@@ -103,15 +103,19 @@ var initReplSet = function(db, hostIpAndPort, done) {
 };
 
 var replSetReconfig = function(db, rsConfig, force, done) {
-  console.log('replSetReconfig', rsConfig);
-
   rsConfig.version++;
+  
+  var memberNames = rsConfig.members.map(function(m) { return m.host; }).join(', ');
+  console.log('Applying replica set reconfig (version ' + rsConfig.version + ', force: ' + force + ')');
+  console.log('  Members: ' + memberNames);
 
   db.admin().command({ replSetReconfig: rsConfig, force: force })
     .then(function() {
+      console.log('Replica set reconfig completed successfully');
       return done();
     })
     .catch(function(err) {
+      console.error('Replica set reconfig failed:', err.message || err);
       return done(err);
     });
 };
@@ -119,12 +123,18 @@ var replSetReconfig = function(db, rsConfig, force, done) {
 var addNewReplSetMembers = function(db, addrToAdd, addrToRemove, shouldForce, done) {
   replSetGetConfig(db, function(err, rsConfig) {
     if (err) {
+      console.error('Failed to get replica set config:', err.message || err);
       return done(err);
     }
 
+    var beforeCount = rsConfig.members ? rsConfig.members.length : 0;
     removeDeadMembers(rsConfig, addrToRemove);
-
     addNewMembers(rsConfig, addrToAdd);
+    var afterCount = rsConfig.members ? rsConfig.members.length : 0;
+
+    if (beforeCount !== afterCount) {
+      console.log('Reconfiguring replica set: ' + beforeCount + ' -> ' + afterCount + ' members');
+    }
 
     replSetReconfig(db, rsConfig, shouldForce, done);
   });
