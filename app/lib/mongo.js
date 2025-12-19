@@ -105,9 +105,11 @@ var initReplSet = function(db, hostIpAndPort, done) {
 var replSetReconfig = function(db, rsConfig, force, done) {
   rsConfig.version++;
   
-  var memberNames = rsConfig.members.map(function(m) { return m.host; }).join(', ');
   console.log('Applying replica set reconfig (version ' + rsConfig.version + ', force: ' + force + ')');
-  console.log('  Members: ' + memberNames);
+  console.log('  Members:');
+  for (var i = 0; i < rsConfig.members.length; i++) {
+    console.log('    - ' + rsConfig.members[i].host);
+  }
 
   db.admin().command({ replSetReconfig: rsConfig, force: force })
     .then(function() {

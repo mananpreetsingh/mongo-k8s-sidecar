@@ -167,8 +167,22 @@ var primaryWork = function(db, pods, members, shouldForce, done) {
 
   if (addrToAdd.length || addrToRemove.length) {
     console.log('\nPRIMARY ACTION: Updating replica set configuration');
-    console.log('  Addresses to add:    ', addrToAdd.length > 0 ? addrToAdd.join(', ') : 'none');
-    console.log('  Addresses to remove: ', addrToRemove.length > 0 ? addrToRemove.join(', ') : 'none');
+    console.log('  Addresses to add:');
+    if (addrToAdd.length > 0) {
+      for (var i = 0; i < addrToAdd.length; i++) {
+        console.log('    - ' + addrToAdd[i]);
+      }
+    } else {
+      console.log('    none');
+    }
+    console.log('  Addresses to remove:');
+    if (addrToRemove.length > 0) {
+      for (var j = 0; j < addrToRemove.length; j++) {
+        console.log('    - ' + addrToRemove[j]);
+      }
+    } else {
+      console.log('    none');
+    }
 
     mongo.addNewReplSetMembers(db, addrToAdd, addrToRemove, shouldForce, function(err) {
       if (err) {
